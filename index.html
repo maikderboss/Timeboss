@@ -154,18 +154,32 @@ input,select,textarea{font-family:'DM Sans',sans-serif}
   <button class="tab" onclick="switchTab(1,this)">Mathe</button>
   <button class="tab" onclick="switchTab(2,this)">Habits & Kalorien</button>
   <button class="tab" onclick="switchTab(3,this)">Termine</button>
+  <button class="tab" onclick="switchTab(4,this)">Statistiken</button>
 </div>
 
 <div class="content">
   <div id="tab0">
     <div class="row" style="margin-bottom:15px">
-      <span style="font-size:15px;font-weight:700">Wochenübersicht</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="shiftWeek(-1)" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer;color:var(--txt2);display:flex;align-items:center;justify-content:center">‹</button>
+        <div style="text-align:center">
+          <div style="font-size:13px;font-weight:700" id="week-label"></div>
+          <div id="week-back-btn" style="display:none">
+            <button onclick="resetWeek()" style="background:none;border:none;font-size:11px;color:var(--txt3);cursor:pointer;padding:0;text-decoration:underline">← Aktuelle Woche</button>
+          </div>
+        </div>
+        <button onclick="shiftWeek(1)" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer;color:var(--txt2);display:flex;align-items:center;justify-content:center">›</button>
+      </div>
       <button class="btn-dark" onclick="openModal('addEvent')">+ Termin</button>
     </div>
     <div id="sp-banner"></div>
     <div id="week-rows"></div>
     <div class="sl" style="margin-top:18px">GYM DIESE WOCHE</div>
     <div class="gym-grid" id="gym-grid"></div>
+  </div>
+
+  <div id="tab4" style="display:none">
+    <div id="stats-content"></div>
   </div>
 
   <div id="tab1" style="display:none">
@@ -291,8 +305,28 @@ const todayKey=fd(now);
 const ws=new Date(now);ws.setDate(now.getDate()-((now.getDay()+6)%7));
 const weekKey=fd(ws);
 
+let weekOffset=0; // how many weeks from current
+
+function getViewWS(){
+  const d=new Date(ws);
+  d.setDate(d.getDate()+weekOffset*7);
+  return d;
+}
+function getViewWeekKey(){return fd(getViewWS());}
+function wdates(){
+  const vws=getViewWS();
+  return Array.from({length:7},(_,i)=>{const d=new Date(vws);d.setDate(vws.getDate()+i);return d;});
+}
+function shiftWeek(delta){
+  weekOffset+=delta;
+  renderAll();
+}
+function resetWeek(){
+  weekOffset=0;
+  renderAll();
+}
+
 function fd(d){return d.toISOString().slice(0,10);}
-function wdates(){return Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(ws.getDate()+i);return d;});}
 
 let S=lload();
 function lload(){try{const r=localStorage.getItem('zeitplan3');if(r)return JSON.parse(r);}catch{}return{events:[],gym:{},math:{},habits:{},cal:{},special:{}};}
@@ -301,13 +335,13 @@ function lsave(){try{localStorage.setItem('zeitplan3',JSON.stringify(S));}catch{
 document.getElementById('hdate').textContent=now.toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'});
 
 function switchTab(i,el){
-  [0,1,2,3].forEach(j=>document.getElementById('tab'+j).style.display=j===i?'':'none');
+  [0,1,2,3,4].forEach(j=>document.getElementById('tab'+j).style.display=j===i?'':'none');
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   el.classList.add('active');
   renderAll();
 }
 
-function renderAll(){rWeek();rMath();rHabits();rEvents();rBadge();}
+function renderAll(){rWeek();rMath();rHabits();rEvents();rBadge();rStats();}
 
 function rBadge(){
   const sp=S.special[weekKey];
@@ -317,7 +351,18 @@ function rBadge(){
 }
 
 function rWeek(){
-  const sp=S.special[weekKey];
+  const vws=getViewWS();
+  const vwk=getViewWeekKey();
+  const isCurrentWeek=weekOffset===0;
+
+  // Week label
+  const vEnd=new Date(vws);vEnd.setDate(vws.getDate()+6);
+  document.getElementById('week-label').textContent=
+    vws.toLocaleDateString('de-DE',{day:'numeric',month:'short'})+' – '+
+    vEnd.toLocaleDateString('de-DE',{day:'numeric',month:'short',year:'numeric'});
+  document.getElementById('week-back-btn').style.display=isCurrentWeek?'none':'block';
+
+  const sp=S.special[vwk];
   const banner=document.getElementById('sp-banner');
   banner.innerHTML=sp?`<div class="special-banner" style="background:${sp==='urlaub'?'#EAF3DE':'#FAEEDA'};color:${sp==='urlaub'?'#27500A':'#633806'}">${sp==='urlaub'?'🏖 Urlaubswoche – Routinen pausiert':'✈ Geschäftsreise – angepasste Routinen'}</div>`:'';
 
@@ -327,12 +372,12 @@ function rWeek(){
     const evs=(S.events||[]).filter(e=>e.date===dk);
     const read=(S.habits[dk]||{}).reading;
     const calT=S.cal[dk]?.total||0;
-    const tc=isT?'#f5f4f0':'#1a1a1a',sc=isT?'#888':'#aaa';
+    const tc=isT?'var(--accent-txt)':'var(--txt)',sc=isT?'rgba(255,255,255,.5)':'var(--txt4)';
     let tags='';
-    if(gym)tags+=`<span class="tag" style="background:${isT?'#333':'#EEEDFE'};color:${isT?'#c9c6f8':'#3C3489'}">${gym==='Push'?'💪':gym==='Pull'?'🏋':'🔄'} ${gym}</span>`;
-    evs.forEach(ev=>{const c=EVC[ev.type]||EVC.sonstiges;tags+=`<span class="tag" style="background:${isT?'#333':c.bg};color:${isT?'#ccc':c.c}">${ev.emoji||'📅'} ${ev.title}</span>`;});
-    if(read)tags+=`<span class="tag" style="background:${isT?'#333':'#E1F5EE'};color:${isT?'#9FE1CB':'#085041'}">📖 Gelesen</span>`;
-    if(calT>0)tags+=`<span class="tag" style="background:${isT?'#333':'#EAF3DE'};color:${isT?'#97C459':'#3B6D11'}">${calT} kcal</span>`;
+    if(gym)tags+=`<span class="tag" style="background:${isT?'rgba(255,255,255,.15)':'#EEEDFE'};color:${isT?'#c9c6f8':'#3C3489'}">${gym==='Push'?'💪':gym==='Pull'?'🏋':'🔄'} ${gym}</span>`;
+    evs.forEach(ev=>{const c=EVC[ev.type]||EVC.sonstiges;tags+=`<span class="tag" style="background:${isT?'rgba(255,255,255,.15)':c.bg};color:${isT?'rgba(255,255,255,.85)':c.c}">${ev.emoji||'📅'} ${ev.title}</span>`;});
+    if(read)tags+=`<span class="tag" style="background:${isT?'rgba(255,255,255,.15)':'#E1F5EE'};color:${isT?'#9FE1CB':'#085041'}">📖 Gelesen</span>`;
+    if(calT>0)tags+=`<span class="tag" style="background:${isT?'rgba(255,255,255,.15)':'#EAF3DE'};color:${isT?'#97C459':'#3B6D11'}">${calT} kcal</span>`;
     return `<div class="day-row${isT?' today':''}" onclick="openModal('dayDetail',{day:${i},dk:'${dk}'})">
       <div><div style="font-size:10px;font-weight:700;letter-spacing:.08em;color:${sc}">${DAYS[i]}</div><div style="font-size:13px;font-weight:500;color:${tc}">${d.getDate()}. ${d.toLocaleDateString('de-DE',{month:'short'})}</div></div>
       <div>${tags||`<span style="font-size:12px;color:${sc}">Kein Eintrag</span>`}</div>
@@ -342,7 +387,7 @@ function rWeek(){
 
   document.getElementById('gym-grid').innerHTML=DAYS.map((d,i)=>`
     <div class="gym-cell${S.gym[i]?' set':''}" onclick="openModal('gym',{day:${i}})">
-      <div>${d}</div><div style="font-size:9px;margin-top:2px;color:${S.gym[i]?'#aaa':'#ddd'}">${S.gym[i]||'—'}</div>
+      <div>${d}</div><div style="font-size:9px;margin-top:2px;color:${S.gym[i]?'var(--txt3)':'var(--txt4)'}">${S.gym[i]||'—'}</div>
     </div>`).join('');
 }
 
@@ -892,6 +937,128 @@ Bei Datum "heute" → ${todayKey}.`;
 
   document.getElementById('chat-send').disabled=false;
   document.getElementById('chat-msgs').scrollTop=999999;
+}
+
+function rStats(){
+  const el=document.getElementById('stats-content');
+  if(!el)return;
+
+  const days28=Array.from({length:28},(_,i)=>{
+    const d=new Date(now);d.setDate(now.getDate()-27+i);
+    return {key:fd(d),d};
+  });
+
+  // ── Kalorien ──────────────────────────────────────────────────────────
+  const calDays=days28.filter(({key})=>S.cal[key]?.total>0);
+  const calAvg=calDays.length?Math.round(calDays.reduce((s,{key})=>s+(S.cal[key]?.total||0),0)/calDays.length):0;
+  const calToday=S.cal[todayKey]?.total||0;
+  const calMax=Math.max(...days28.map(({key})=>S.cal[key]?.total||0),2100,1);
+
+  const calBars=days28.map(({key,d})=>{
+    const v=S.cal[key]?.total||0;
+    const h=v?Math.max(4,Math.round((v/calMax)*64)):2;
+    const isT=key===todayKey;
+    const color=v>2300?'#E24B4A':v>=1700?'#1D9E75':'#378ADD';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1">
+      <div style="height:64px;display:flex;align-items:flex-end">
+        <div style="width:100%;height:${h}px;background:${v?color:'var(--bg3)'};border-radius:3px 3px 0 0;opacity:${isT?1:.8}"></div>
+      </div>
+      ${d.getDay()===1?`<div style="font-size:9px;color:var(--txt4)">${d.getDate()}.</div>`:'<div style="font-size:9px;color:transparent">·</div>'}
+    </div>`;
+  }).join('');
+
+  // ── Lesen ──────────────────────────────────────────────────────────────
+  const readDays28=days28.filter(({key})=>(S.habits[key]||{}).reading).length;
+  const readPct28=Math.round((readDays28/28)*100);
+  const readStreak=calcStreak();
+  const readDots=days28.map(({key})=>{
+    const done=(S.habits[key]||{}).reading;
+    const isT=key===todayKey;
+    return `<div style="width:100%;aspect-ratio:1;border-radius:4px;background:${done?'#1D9E75':'var(--bg3)'};outline:${isT?'2px solid var(--today-ring)':'none'};outline-offset:1px"></div>`;
+  }).join('');
+
+  // ── Gym ────────────────────────────────────────────────────────────────
+  const gymCount=Object.values(S.gym||{}).filter(v=>v).length;
+
+  // ── Mathe ──────────────────────────────────────────────────────────────
+  const mathDone=MATH.filter(t=>(S.math[t.id]||0)===100).length;
+  const mathPct=Math.round(MATH.reduce((s,t)=>s+(S.math[t.id]||0),0)/MATH.length);
+
+  const mathBars=MATH.map(t=>{
+    const p=S.math[t.id]||0;
+    const overdue=isBlockOverdue(t);
+    const active=isBlockActive(t);
+    return `<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span style="color:var(--txt2)">${t.label}</span>
+        <span style="font-weight:600;color:${p===100?t.color:overdue?'#E24B4A':'var(--txt3)'}">${p===100?'✓ Fertig':overdue?'Überfällig':active?p+'% aktiv':p+'%'}</span>
+      </div>
+      <div style="background:var(--prog-bg);border-radius:3px;height:5px">
+        <div style="height:5px;border-radius:3px;background:${p===100?t.color:overdue?'#E24B4A':t.color};width:${p}%;opacity:${p>0||active?1:.35}"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML=`
+    <div class="card">
+      <div class="sl">KALORIEN · LETZTE 28 TAGE</div>
+      <div class="metric-grid" style="margin-bottom:14px">
+        <div class="metric"><div class="val">${calAvg||'–'}</div><div class="lbl">Ø PRO TAG</div></div>
+        <div class="metric"><div class="val">${calToday||'–'}</div><div class="lbl">HEUTE</div></div>
+        <div class="metric"><div class="val" style="color:${calAvg>=1700&&calAvg<=2300?'#1D9E75':calAvg?'#E24B4A':'var(--txt3)'}">${calAvg>=1700&&calAvg<=2300?'Im Ziel':calAvg?'Prüfen':'Keine Daten'}</div><div class="lbl">STATUS</div></div>
+      </div>
+      <div style="display:flex;gap:2px;align-items:flex-end">${calBars}</div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--txt4);margin-top:6px">
+        <span>vor 28 Tagen</span>
+        <span><span style="color:#1D9E75">■</span> Ziel &nbsp;<span style="color:#E24B4A">■</span> Hoch</span>
+        <span>heute</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sl">ABENDLESEN · LETZTE 28 TAGE</div>
+      <div class="metric-grid" style="margin-bottom:14px">
+        <div class="metric"><div class="val">${readStreak}</div><div class="lbl">STREAK</div></div>
+        <div class="metric"><div class="val">${readDays28}/28</div><div class="lbl">TAGE GELESEN</div></div>
+        <div class="metric"><div class="val" style="color:${readPct28>=70?'#1D9E75':readPct28>=40?'#BA7517':'#E24B4A'}">${readPct28}%</div><div class="lbl">QUOTE</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(28,1fr);gap:2px">${readDots}</div>
+      <div style="font-size:10px;color:var(--txt4);margin-top:6px">Jedes Kästchen = 1 Tag · Grün = gelesen</div>
+    </div>
+
+    <div class="card">
+      <div class="sl">GYM · DIESE WOCHE</div>
+      <div class="metric-grid" style="margin-bottom:14px">
+        <div class="metric"><div class="val">${gymCount}/3</div><div class="lbl">EINHEITEN</div></div>
+        <div class="metric"><div class="val" style="color:${gymCount>=3?'#1D9E75':gymCount>=2?'#BA7517':'#E24B4A'}">${gymCount>=3?'Auf Kurs':gymCount>=2?'Fast da':'Aufholen'}</div><div class="lbl">STATUS</div></div>
+        <div class="metric"><div class="val">${gymCount>=3?'✓':'noch '+(3-gymCount)}</div><div class="lbl">BIS ZIEL</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+        ${['Push','Pull','Ganzkörper'].map(t=>{
+          const done=Object.values(S.gym||{}).includes(t);
+          return `<div style="background:${done?'#EEEDFE':'var(--bg3)'};border-radius:9px;padding:10px;text-align:center">
+            <div style="font-size:20px">${t==='Push'?'💪':t==='Pull'?'🏋':'🔄'}</div>
+            <div style="font-size:12px;font-weight:600;margin-top:5px;color:${done?'#3C3489':'var(--txt3)'}">${t}</div>
+            <div style="font-size:10px;color:${done?'#7F77DD':'var(--txt4)'};margin-top:2px">${done?'✓ geplant':'–'}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sl">MATHEMATIK · STUDIUMSVORBEREITUNG</div>
+      <div class="metric-grid" style="margin-bottom:16px">
+        <div class="metric"><div class="val">${mathDone}/${MATH.length}</div><div class="lbl">BLÖCKE FERTIG</div></div>
+        <div class="metric"><div class="val">${mathPct}%</div><div class="lbl">GESAMT</div></div>
+        <div class="metric"><div class="val">${weeksLeft()}</div><div class="lbl">WOCHEN ÜBRIG</div></div>
+      </div>
+      ${mathBars}
+      <div style="background:var(--prog-bg);border-radius:5px;height:7px;margin-top:6px">
+        <div style="height:7px;border-radius:5px;background:#7F77DD;width:${mathPct}%;transition:width .4s"></div>
+      </div>
+      <div style="font-size:11px;color:var(--txt4);margin-top:5px;text-align:right">${mathPct}% des Gesamtplans</div>
+    </div>
+  `;
 }
 
 renderAll();
