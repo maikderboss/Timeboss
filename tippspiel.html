@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quotentipp – Tippspiel</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <style>
 :root{
   --bg:#f5f4f0;--bg2:#fff;--bg3:#f0ede8;--bg4:#e8e5e0;
@@ -46,6 +48,9 @@ input,select{font-family:'DM Sans',sans-serif}
 .tab{background:none;border:none;border-bottom:2.5px solid transparent;padding:12px 14px;font-size:12px;font-weight:600;color:var(--txt3);cursor:pointer;letter-spacing:.03em;white-space:nowrap}
 .tab.active{color:var(--txt);border-bottom-color:var(--txt)}
 .content{padding:18px 20px 80px;max-width:720px;margin:0 auto}
+.room-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--gold-bg);border:1px solid var(--border);border-radius:11px;padding:10px 13px;margin-bottom:12px;font-size:12px}
+.room-banner b{color:var(--gold)}
+.offline-banner{background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:10px 13px;margin-bottom:12px;font-size:12px;color:var(--txt2)}
 .player-bar{display:flex;align-items:center;gap:8px;background:var(--card-bg);border:1px solid var(--border);border-radius:11px;padding:10px 13px;margin-bottom:14px}
 .player-bar .sl{margin:0;white-space:nowrap}
 .player-bar select{flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--inp-bg);color:var(--txt)}
@@ -115,6 +120,8 @@ input,select{font-family:'DM Sans',sans-serif}
 
 <div class="content">
 
+  <div id="room-banner-slot"></div>
+
   <div class="player-bar">
     <span class="sl">TIPPE ALS</span>
     <select id="player-select" onchange="setActiveParticipant(this.value)"></select>
@@ -124,7 +131,7 @@ input,select{font-family:'DM Sans',sans-serif}
   <div id="tab0">
     <div class="dark-card">
       Bei richtigem Tipp bekommst du Punkte in Höhe der <b>gerundeten Quote</b> – Quote 5.20 auf den Außenseiter richtig getippt bringt <b>5 Punkte</b>, Quote 1.30 auf den Favoriten nur <b>1 Punkt</b>. Falscher Tipp = 0 Punkte. So lohnt sich ein mutiger Tipp mehr als der sichere.
-      <div style="margin-top:8px;font-size:11px;color:var(--txt4)">Startdaten: echte Achtelfinal-Playoff-Paarungen der WM 2026 vom 01.07. mit Quoten-Momentaufnahme (Stand 30.06./01.07.2026). Statischer Entwurf ohne Live-Feed – für den Echtbetrieb per Odds-API automatisch aktualisieren.</div>
+      <div style="margin-top:8px;font-size:11px;color:var(--txt4)">Startdaten: echte WM-2026-Paarungen der Runde der letzten 32 (Stand 01.07.2026) mit Quoten-Momentaufnahme. Achtelfinale &amp; folgende Runden werden ergänzt, sobald die Paarungen feststehen. Statischer Odds-Snapshot ohne Live-Feed.</div>
     </div>
     <div class="row" style="margin-bottom:4px">
       <div class="sl" style="margin:0">OFFENE EVENTS</div>
@@ -150,43 +157,113 @@ input,select{font-family:'DM Sans',sans-serif}
 <div id="modal-root"></div>
 
 <script>
+/* ============================================================
+   FIREBASE-SETUP (für gemeinsames Spielen über mehrere Geräte)
+   1. https://console.firebase.google.com -> Projekt anlegen (kostenlos)
+   2. Build > Realtime Database -> "Datenbank erstellen" (Testmodus reicht fuer den Start)
+   3. Projekteinstellungen (Zahnrad) > "Meine Apps" > Web-App hinzufügen
+   4. Die 6 Werte unten aus dem angezeigten Config-Objekt eintragen
+   Solange hier Platzhalter stehen, läuft die App im Lokalmodus
+   (nur auf diesem Gerät, Daten in localStorage).
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+const FIREBASE_READY = firebaseConfig.apiKey !== "YOUR_API_KEY";
+
 const UID = () => Math.random().toString(36).slice(2,10);
-const STORAGE_KEY = 'quotentipp_state_v2';
+const LOCAL_KEY = 'quotentipp_local_v1';
 
 function seedEvents(){
-  // Reale Ansetzungen der Runde der letzten 32, WM 2026 (01.07.2026).
-  // Quoten aus Moneyline-Angaben (Fox Sports, Stand 30.06./01.07.2026) in Dezimalquoten umgerechnet.
-  // Statischer Snapshot ohne Backend – in einer echten Version per Live-Odds-API aktuell halten.
+  // Reale Ansetzungen der Runde der letzten 32, WM 2026.
+  // Quoten aus 3-Wege-Moneyline-Angaben (Fox Sports / Sports Betting Dime,
+  // Stand 30.06.-01.07.2026) in Dezimalquoten umgerechnet.
+  // Statischer Snapshot ohne Backend-Feed.
   return [
-    { id: UID(), title:'England – DR Kongo', category:'WM 2026 · Achtelfinal-Playoff', deadline: new Date('2026-07-01T12:00:00-04:00').getTime(), status:'open', resolvedIdx:null,
+    { id: UID(), title:'England – DR Kongo', category:'WM 2026 · Runde der letzten 32', deadline: new Date('2026-07-01T12:00:00-04:00').getTime(), status:'open', resolvedIdx:null,
       outcomes:[ {label:'Sieg England', odds:1.26}, {label:'Unentschieden', odds:5.40}, {label:'Sieg DR Kongo', odds:14.00} ] },
-    { id: UID(), title:'Belgien – Senegal', category:'WM 2026 · Achtelfinal-Playoff', deadline: new Date('2026-07-01T16:00:00-07:00').getTime(), status:'open', resolvedIdx:null,
+    { id: UID(), title:'Belgien – Senegal', category:'WM 2026 · Runde der letzten 32', deadline: new Date('2026-07-01T16:00:00-07:00').getTime(), status:'open', resolvedIdx:null,
       outcomes:[ {label:'Sieg Belgien', odds:2.15}, {label:'Unentschieden', odds:3.10}, {label:'Sieg Senegal', odds:3.60} ] },
-    { id: UID(), title:'USA – Bosnien-Herzegowina', category:'WM 2026 · Achtelfinal-Playoff', deadline: new Date('2026-07-01T20:00:00-07:00').getTime(), status:'open', resolvedIdx:null,
-      outcomes:[ {label:'Sieg USA', odds:1.36}, {label:'Unentschieden', odds:5.00}, {label:'Sieg Bosnien-Herz.', odds:9.00} ] }
+    { id: UID(), title:'USA – Bosnien-Herzegowina', category:'WM 2026 · Runde der letzten 32', deadline: new Date('2026-07-01T20:00:00-07:00').getTime(), status:'open', resolvedIdx:null,
+      outcomes:[ {label:'Sieg USA', odds:1.36}, {label:'Unentschieden', odds:5.00}, {label:'Sieg Bosnien-Herz.', odds:9.00} ] },
+    { id: UID(), title:'Portugal – Kroatien', category:'WM 2026 · Runde der letzten 32', deadline: new Date('2026-07-02T19:00:00-04:00').getTime(), status:'open', resolvedIdx:null,
+      outcomes:[ {label:'Sieg Portugal', odds:1.91}, {label:'Unentschieden', odds:3.60}, {label:'Sieg Kroatien', odds:4.30} ] },
+    { id: UID(), title:'Spanien – Österreich', category:'WM 2026 · Runde der letzten 32', deadline: new Date('2026-07-02T15:00:00-07:00').getTime(), status:'open', resolvedIdx:null,
+      outcomes:[ {label:'Sieg Spanien', odds:1.30}, {label:'Unentschieden', odds:5.80}, {label:'Sieg Österreich', odds:12.00} ] },
+    { id: UID(), title:'Schweiz – Algerien', category:'WM 2026 · Runde der letzten 32', deadline: new Date('2026-07-02T23:00:00-07:00').getTime(), status:'open', resolvedIdx:null,
+      outcomes:[ {label:'Sieg Schweiz', odds:1.63}, {label:'Unentschieden', odds:3.90}, {label:'Sieg Algerien', odds:5.50} ] },
+    { id: UID(), title:'Australien – Ägypten', category:'WM 2026 · Runde der letzten 32', deadline: new Date('2026-07-03T19:00:00-05:00').getTime(), status:'open', resolvedIdx:null,
+      outcomes:[ {label:'Sieg Australien', odds:3.40}, {label:'Unentschieden', odds:2.85}, {label:'Sieg Ägypten', odds:2.50} ] },
+    { id: UID(), title:'Kolumbien – Ghana', category:'WM 2026 · Runde der letzten 32', deadline: new Date('2026-07-03T21:30:00-04:00').getTime(), status:'open', resolvedIdx:null,
+      outcomes:[ {label:'Sieg Kolumbien', odds:1.50}, {label:'Unentschieden', odds:3.90}, {label:'Sieg Ghana', odds:7.50} ] },
+    { id: UID(), title:'Argentinien – Kap Verde', category:'WM 2026 · Runde der letzten 32', deadline: new Date('2026-07-03T23:00:00-04:00').getTime(), status:'open', resolvedIdx:null,
+      outcomes:[ {label:'Sieg Argentinien', odds:1.14}, {label:'Unentschieden', odds:7.50}, {label:'Sieg Kap Verde', odds:20.00} ] }
   ];
 }
 
-function load(){
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if(raw){
-    try{
-      const s = JSON.parse(raw);
-      if(s.participants && s.participants.length) return s;
-    }catch(e){}
-  }
-  const meId = UID();
-  return {
-    participants: [{id: meId, name:'Du'}],
-    activeParticipantId: meId,
-    events: seedEvents(),
-    tips: []
-  };
+function defaultSharedState(){
+  return { participants: [], events: seedEvents(), tips: [] };
 }
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
-let state = load();
-let draft = {}; // eventId -> selected outcome index
+// --- Lokaler Zustand: wer "ich" auf diesem Gerät bin (wird NIE synchronisiert) ---
+function loadLocal(){
+  try{ return JSON.parse(localStorage.getItem(LOCAL_KEY)) || {}; }catch(e){ return {}; }
+}
+let localState = loadLocal();
+function saveLocal(){ localStorage.setItem(LOCAL_KEY, JSON.stringify(localState)); }
+
+// --- Geteilter Zustand: Teilnehmer, Events, Tipps (per Firebase oder lokal) ---
+let state = defaultSharedState();
+let draft = {}; // eventId -> ausgewählter Ausgang (Index)
+let roomCode = null;
+let dbRef = null;
+
+function save(){
+  if(dbRef){ dbRef.set(state); }
+  else { localStorage.setItem('quotentipp_state_offline', JSON.stringify(state)); }
+}
+
+function initShared(){
+  if(FIREBASE_READY){
+    try{
+      firebase.initializeApp(firebaseConfig);
+      const params = new URLSearchParams(location.search);
+      roomCode = params.get('room');
+      if(!roomCode){
+        roomCode = Math.random().toString(36).slice(2,8).toUpperCase();
+        params.set('room', roomCode);
+        history.replaceState(null, '', location.pathname + '?' + params.toString());
+      }
+      dbRef = firebase.database().ref('rooms/' + roomCode);
+      dbRef.once('value').then(snap=>{
+        if(!snap.exists()){
+          state = defaultSharedState();
+          dbRef.set(state);
+        } else {
+          state = snap.val();
+        }
+        dbRef.on('value', snap2=>{
+          if(snap2.exists()){ state = snap2.val(); render(); }
+        });
+        render();
+      });
+      return;
+    }catch(e){
+      console.error('Firebase-Init fehlgeschlagen, wechsle in Lokalmodus:', e);
+      dbRef = null; roomCode = null;
+    }
+  }
+  // Lokalmodus (kein Firebase konfiguriert oder Init fehlgeschlagen)
+  const raw = localStorage.getItem('quotentipp_state_offline');
+  if(raw){ try{ state = JSON.parse(raw); }catch(e){} }
+  render();
+}
 
 function fmtDeadline(ts){
   const d = new Date(ts);
@@ -198,7 +275,10 @@ function pointsFor(participantId){
   return state.tips.filter(t=>t.participantId===participantId && t.status==='won').reduce((sum,t)=>sum+t.points,0);
 }
 function activeParticipant(){
-  return state.participants.find(p=>p.id===state.activeParticipantId) || state.participants[0];
+  return state.participants.find(p=>p.id===localState.activeParticipantId);
+}
+function iAmRegistered(){
+  return !!activeParticipant();
 }
 
 function switchTab(i, el){
@@ -209,8 +289,8 @@ function switchTab(i, el){
 }
 
 function setActiveParticipant(id){
-  state.activeParticipantId = id;
-  save(); render();
+  localState.activeParticipantId = id;
+  saveLocal(); render();
 }
 
 function selectOutcome(eventId, idx){
@@ -222,8 +302,8 @@ function placeTip(eventId){
   const ev = state.events.find(e=>e.id===eventId);
   const idx = draft[eventId];
   if(!ev || idx===undefined || idx===null) return;
-  const pid = state.activeParticipantId;
-  if(state.tips.some(t=>t.eventId===eventId && t.participantId===pid)) return;
+  const pid = localState.activeParticipantId;
+  if(!pid || state.tips.some(t=>t.eventId===eventId && t.participantId===pid)) return;
   state.tips.push({
     id: UID(), eventId, participantId: pid, outcomeIdx: idx,
     oddsAtTip: ev.outcomes[idx].odds,
@@ -254,33 +334,54 @@ function tipFor(eventId, participantId){
   return state.tips.find(t=>t.eventId===eventId && t.participantId===participantId);
 }
 
+function renderRoomBanner(){
+  const slot = document.getElementById('room-banner-slot');
+  if(dbRef && roomCode){
+    slot.innerHTML = `<div class="room-banner">
+      <div>Raum <b>${roomCode}</b> – schick diesen Link an deine Freunde, damit ihr zusammen tippt.</div>
+      <button class="btn-ghost" onclick="copyRoomLink(this)">Link kopieren</button>
+    </div>`;
+  } else if(!FIREBASE_READY){
+    slot.innerHTML = `<div class="offline-banner">Lokalmodus: Diese App läuft nur auf diesem Gerät. Für Mehrgeräte-Spiel mit Freunden muss oben im Code noch die Firebase-Konfiguration eingetragen werden.</div>`;
+  } else {
+    slot.innerHTML = '';
+  }
+}
+function copyRoomLink(btn){
+  navigator.clipboard.writeText(location.href).then(()=>{
+    const old = btn.textContent;
+    btn.textContent = 'Kopiert!';
+    setTimeout(()=>{ btn.textContent = old; }, 1500);
+  });
+}
+
 function renderPlayerBar(){
   const sel = document.getElementById('player-select');
   sel.innerHTML = state.participants.map(p=>
-    `<option value="${p.id}" ${p.id===state.activeParticipantId?'selected':''}>${p.name} (${fmtPts(pointsFor(p.id))} Pkt.)</option>`
+    `<option value="${p.id}" ${p.id===localState.activeParticipantId?'selected':''}>${p.name} (${fmtPts(pointsFor(p.id))} Pkt.)</option>`
   ).join('');
 }
 
 function renderHeader(){
   const p = activeParticipant();
-  document.getElementById('me-badge').textContent = p ? `👤 ${p.name} · ${fmtPts(pointsFor(p.id))} Pkt.` : '–';
+  document.getElementById('me-badge').textContent = p ? `👤 ${p.name} · ${fmtPts(pointsFor(p.id))} Pkt.` : '👤 Noch nicht angemeldet';
 }
 
 function renderEvents(){
   const el = document.getElementById('events-list');
   const open = state.events.filter(e=>e.status==='open');
-  const activeId = state.activeParticipantId;
+  const activeId = localState.activeParticipantId;
   if(open.length===0){ el.innerHTML = '<div class="empty">Keine offenen Events.</div>'; return; }
   el.innerHTML = open.map(ev=>{
     const closed = Date.now() > ev.deadline;
-    const existingTip = tipFor(ev.id, activeId);
+    const existingTip = activeId ? tipFor(ev.id, activeId) : null;
     const selIdx = draft[ev.id];
     const tipCount = state.tips.filter(t=>t.eventId===ev.id).length;
     const outcomesHtml = ev.outcomes.map((o,idx)=>{
       let cls = 'outcome-btn';
       if(existingTip && existingTip.outcomeIdx===idx) cls += ' selected';
       else if(!existingTip && selIdx===idx) cls += ' selected';
-      const disabled = existingTip || closed;
+      const disabled = existingTip || closed || !activeId;
       return `<button class="${cls}" ${disabled?'disabled':''} onclick="selectOutcome('${ev.id}',${idx})">
         <div><div class="lbl">${o.label}</div><div class="impl">Implizite Chance ~${implied(o.odds)}</div></div>
         <div><div class="odds">${o.odds.toFixed(2)}</div><div class="pts-hint">${Math.round(o.odds)} Pkt. bei Treffer</div></div>
@@ -288,7 +389,9 @@ function renderEvents(){
     }).join('');
 
     let actionHtml = '';
-    if(existingTip){
+    if(!activeId){
+      actionHtml = `<div class="placed-note">Melde dich oben über „+ Mitspieler" an, um mitzutippen.</div>`;
+    } else if(existingTip){
       actionHtml = `<div class="placed-note">Dein Tipp: <b>${ev.outcomes[existingTip.outcomeIdx].label}</b> @ ${existingTip.oddsAtTip.toFixed(2)} · bei Treffer ${Math.round(existingTip.oddsAtTip)} Pkt.</div>`;
     } else if(closed){
       actionHtml = `<div class="resolve-box">
@@ -315,9 +418,9 @@ function renderEvents(){
 function renderMyTips(){
   const pendingEl = document.getElementById('pending-list');
   const historyEl = document.getElementById('history-list');
-  const activeId = state.activeParticipantId;
-  const pending = state.tips.filter(t=>t.participantId===activeId && t.status==='pending');
-  const history = state.tips.filter(t=>t.participantId===activeId && t.status!=='pending').sort((a,b)=>b.placedAt-a.placedAt);
+  const activeId = localState.activeParticipantId;
+  const pending = activeId ? state.tips.filter(t=>t.participantId===activeId && t.status==='pending') : [];
+  const history = activeId ? state.tips.filter(t=>t.participantId===activeId && t.status!=='pending').sort((a,b)=>b.placedAt-a.placedAt) : [];
 
   pendingEl.innerHTML = pending.length? pending.map(t=>{
     const ev = state.events.find(e=>e.id===t.eventId);
@@ -345,10 +448,14 @@ function renderMyTips(){
 
 function renderLeaderboard(){
   const el = document.getElementById('leaderboard-list');
+  if(state.participants.length===0){
+    el.innerHTML = '<div class="empty">Noch keine Mitspieler. Über „+ Mitspieler" beitreten.</div>';
+    return;
+  }
   const rows = state.participants
     .map(p=>({id:p.id, name:p.name, points: pointsFor(p.id)}))
     .sort((a,b)=>b.points-a.points);
-  el.innerHTML = rows.map((p,i)=>`<div class="lb-row ${p.id===state.activeParticipantId?'me':''}">
+  el.innerHTML = rows.map((p,i)=>`<div class="lb-row ${p.id===localState.activeParticipantId?'me':''}">
     <div class="lb-rank">#${i+1}</div>
     <div class="lb-name">${p.name}</div>
     <div class="lb-points">${fmtPts(p.points)} Pkt.</div>
@@ -356,6 +463,7 @@ function renderLeaderboard(){
 }
 
 function render(){
+  renderRoomBanner();
   renderPlayerBar();
   renderHeader();
   renderEvents();
@@ -403,7 +511,8 @@ function submitAddParticipant(){
   if(!name) return;
   const id = UID();
   state.participants.push({id, name});
-  state.activeParticipantId = id;
+  localState.activeParticipantId = id;
+  saveLocal();
   save();
   closeModal();
   render();
@@ -443,7 +552,7 @@ function submitCreateEvent(){
 }
 function closeModal(){ document.getElementById('modal-root').innerHTML = ''; }
 
-render();
+initShared();
 </script>
 </body>
 </html>
