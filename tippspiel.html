@@ -46,12 +46,15 @@ input,select{font-family:'DM Sans',sans-serif}
 .tab{background:none;border:none;border-bottom:2.5px solid transparent;padding:12px 14px;font-size:12px;font-weight:600;color:var(--txt3);cursor:pointer;letter-spacing:.03em;white-space:nowrap}
 .tab.active{color:var(--txt);border-bottom-color:var(--txt)}
 .content{padding:18px 20px 80px;max-width:720px;margin:0 auto}
+.player-bar{display:flex;align-items:center;gap:8px;background:var(--card-bg);border:1px solid var(--border);border-radius:11px;padding:10px 13px;margin-bottom:14px}
+.player-bar .sl{margin:0;white-space:nowrap}
+.player-bar select{flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:7px;font-size:13px;background:var(--inp-bg);color:var(--txt)}
 .card{background:var(--card-bg);border:1px solid var(--border);border-radius:13px;padding:15px 17px;margin-bottom:11px}
 .dark-card{background:var(--header-bg);color:#e8e5e0;border:1px solid var(--border);border-radius:13px;padding:16px 17px;margin-bottom:17px;font-size:13px;line-height:1.55}
 .dark-card b{color:var(--gold)}
 .sl{font-size:10px;letter-spacing:.1em;color:var(--txt4);margin-bottom:8px;font-weight:600}
 .btn-dark{background:var(--accent);color:var(--accent-txt);border:none;border-radius:8px;padding:8px 15px;font-size:12px;font-weight:600;cursor:pointer}
-.btn-ghost{background:var(--bg3);color:var(--txt2);border:1px solid var(--border2);border-radius:8px;padding:7px 12px;font-size:11px;cursor:pointer}
+.btn-ghost{background:var(--bg3);color:var(--txt2);border:1px solid var(--border2);border-radius:8px;padding:7px 12px;font-size:11px;cursor:pointer;white-space:nowrap}
 .row{display:flex;justify-content:space-between;align-items:center}
 .tag{display:inline-block;font-size:10px;padding:3px 9px;border-radius:20px;font-weight:600;background:var(--bg3);color:var(--txt3);margin-right:6px}
 .deadline{font-size:11px;color:var(--txt3)}
@@ -60,19 +63,12 @@ input,select{font-family:'DM Sans',sans-serif}
 .outcome-btn{display:flex;justify-content:space-between;align-items:center;width:100%;background:var(--bg3);border:1.5px solid var(--border);border-radius:10px;padding:10px 13px;font-family:'DM Sans',sans-serif;color:var(--txt);text-align:left}
 .outcome-btn:hover{border-color:var(--border2)}
 .outcome-btn.selected{background:var(--accent);color:var(--accent-txt);border-color:var(--accent)}
-.outcome-btn.selected .impl{color:var(--accent-txt);opacity:.7}
+.outcome-btn.selected .impl,.outcome-btn.selected .pts-hint{color:var(--accent-txt);opacity:.7}
 .outcome-btn .lbl{font-size:13px;font-weight:600}
 .outcome-btn .impl{font-size:10px;color:var(--txt4);margin-top:2px}
-.outcome-btn .odds{font-size:16px;font-weight:700}
-.outcome-btn.resolved-win{border-color:var(--green);background:var(--green-bg)}
-.outcome-btn.resolved-lose{opacity:.5}
-.stake-row{display:flex;gap:7px;align-items:center;margin-bottom:8px}
-.stake-row input{flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--inp-bg);color:var(--txt);outline:none}
-.pct-btns{display:flex;gap:5px;margin-bottom:10px}
-.pct-btn{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 0;font-size:11px;cursor:pointer;color:var(--txt2)}
-.pct-btn.active{background:var(--accent);color:var(--accent-txt);border-color:var(--accent)}
-.potential{font-size:12px;color:var(--txt3);margin-bottom:10px}
-.potential b{color:var(--green)}
+.outcome-btn .odds{font-size:16px;font-weight:700;text-align:right}
+.outcome-btn .pts-hint{font-size:10px;color:var(--txt4);margin-top:2px;text-align:right}
+.tip-count{font-size:11px;color:var(--txt3);margin-top:2px}
 .save-btn{width:100%;background:var(--accent);color:var(--accent-txt);border:none;border-radius:9px;padding:10px;font-size:13px;font-weight:600;cursor:pointer}
 .save-btn:disabled{opacity:.35;cursor:default}
 .resolve-box{background:var(--gold-bg);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-top:10px}
@@ -99,7 +95,6 @@ input,select{font-family:'DM Sans',sans-serif}
 .outcome-field input{flex:1}
 .outcome-field input.odds-inp{flex:0 0 80px}
 .empty{text-align:center;color:var(--txt3);font-size:13px;padding:30px 10px}
-#fab{position:fixed;bottom:22px;right:20px;background:var(--accent);color:var(--accent-txt);border:none;border-radius:50%;width:52px;height:52px;font-size:24px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
 </style>
 </head>
 <body>
@@ -109,7 +104,7 @@ input,select{font-family:'DM Sans',sans-serif}
     <div class="eyebrow">TIPPSPIEL</div>
     <div class="header-title">Quotentipp</div>
   </div>
-  <div class="balance-badge">🪙 <span id="balance-n">0</span> Pkt.</div>
+  <div class="balance-badge" id="me-badge">–</div>
 </div>
 
 <div class="tabs">
@@ -120,9 +115,15 @@ input,select{font-family:'DM Sans',sans-serif}
 
 <div class="content">
 
+  <div class="player-bar">
+    <span class="sl">TIPPE ALS</span>
+    <select id="player-select" onchange="setActiveParticipant(this.value)"></select>
+    <button class="btn-ghost" onclick="openModal('addParticipant')">+ Mitspieler</button>
+  </div>
+
   <div id="tab0">
     <div class="dark-card">
-      Je <b>unwahrscheinlicher</b> dein Tipp, desto <b>höher die Quote</b> – und desto mehr Punkte gewinnst du. Ein Tipp auf den klaren Außenseiter bringt mehr als ein sicherer Tipp auf den Favoriten. Falscher Tipp = Einsatz weg.
+      Bei richtigem Tipp bekommst du Punkte in Höhe der <b>gerundeten Quote</b> – Quote 5.20 auf den Außenseiter richtig getippt bringt <b>5 Punkte</b>, Quote 1.30 auf den Favoriten nur <b>1 Punkt</b>. Falscher Tipp = 0 Punkte. So lohnt sich ein mutiger Tipp mehr als der sichere.
       <div style="margin-top:8px;font-size:11px;color:var(--txt4)">Startdaten: echte Achtelfinal-Playoff-Paarungen der WM 2026 vom 01.07. mit Quoten-Momentaufnahme (Stand 30.06./01.07.2026). Statischer Entwurf ohne Live-Feed – für den Echtbetrieb per Odds-API automatisch aktualisieren.</div>
     </div>
     <div class="row" style="margin-bottom:4px">
@@ -140,7 +141,7 @@ input,select{font-family:'DM Sans',sans-serif}
   </div>
 
   <div id="tab2" style="display:none">
-    <div class="sl">RANGLISTE (Demo)</div>
+    <div class="sl">RANGLISTE DER GRUPPE</div>
     <div id="leaderboard-list"></div>
   </div>
 
@@ -150,8 +151,7 @@ input,select{font-family:'DM Sans',sans-serif}
 
 <script>
 const UID = () => Math.random().toString(36).slice(2,10);
-const STORAGE_KEY = 'quotentipp_state_v1';
-const START_BALANCE = 1000;
+const STORAGE_KEY = 'quotentipp_state_v2';
 
 function seedEvents(){
   // Reale Ansetzungen der Runde der letzten 32, WM 2026 (01.07.2026).
@@ -169,13 +169,24 @@ function seedEvents(){
 
 function load(){
   const raw = localStorage.getItem(STORAGE_KEY);
-  if(raw){ try{ return JSON.parse(raw); }catch(e){} }
-  return { balance: START_BALANCE, events: seedEvents(), tips: [] };
+  if(raw){
+    try{
+      const s = JSON.parse(raw);
+      if(s.participants && s.participants.length) return s;
+    }catch(e){}
+  }
+  const meId = UID();
+  return {
+    participants: [{id: meId, name:'Du'}],
+    activeParticipantId: meId,
+    events: seedEvents(),
+    tips: []
+  };
 }
 function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
 let state = load();
-let draft = {}; // eventId -> {idx, stake}
+let draft = {}; // eventId -> selected outcome index
 
 function fmtDeadline(ts){
   const d = new Date(ts);
@@ -183,6 +194,12 @@ function fmtDeadline(ts){
 }
 function implied(odds){ return Math.round(100/odds) + '%'; }
 function fmtPts(n){ return Math.round(n).toLocaleString('de-DE'); }
+function pointsFor(participantId){
+  return state.tips.filter(t=>t.participantId===participantId && t.status==='won').reduce((sum,t)=>sum+t.points,0);
+}
+function activeParticipant(){
+  return state.participants.find(p=>p.id===state.activeParticipantId) || state.participants[0];
+}
 
 function switchTab(i, el){
   document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));
@@ -191,33 +208,26 @@ function switchTab(i, el){
   render();
 }
 
+function setActiveParticipant(id){
+  state.activeParticipantId = id;
+  save(); render();
+}
+
 function selectOutcome(eventId, idx){
-  if(!draft[eventId]) draft[eventId] = {idx:null, stake:50};
-  draft[eventId].idx = idx;
-  render();
-}
-function setPct(eventId, pct){
-  if(!draft[eventId]) draft[eventId] = {idx:null, stake:0};
-  draft[eventId].stake = Math.max(1, Math.round(state.balance * pct));
-  render();
-}
-function setStake(eventId, val){
-  if(!draft[eventId]) draft[eventId] = {idx:null, stake:0};
-  draft[eventId].stake = Math.max(0, Math.round(Number(val)||0));
+  draft[eventId] = idx;
   render();
 }
 
 function placeTip(eventId){
   const ev = state.events.find(e=>e.id===eventId);
-  const d = draft[eventId];
-  if(!ev || !d || d.idx===null || d.idx===undefined) return;
-  const stake = d.stake;
-  if(stake<=0 || stake>state.balance) return;
-  state.balance -= stake;
+  const idx = draft[eventId];
+  if(!ev || idx===undefined || idx===null) return;
+  const pid = state.activeParticipantId;
+  if(state.tips.some(t=>t.eventId===eventId && t.participantId===pid)) return;
   state.tips.push({
-    id: UID(), eventId, outcomeIdx: d.idx, stake,
-    oddsAtTip: ev.outcomes[d.idx].odds,
-    placedAt: Date.now(), status:'pending', payout:0
+    id: UID(), eventId, participantId: pid, outcomeIdx: idx,
+    oddsAtTip: ev.outcomes[idx].odds,
+    placedAt: Date.now(), status:'pending', points:0
   });
   delete draft[eventId];
   save(); render();
@@ -230,61 +240,63 @@ function resolveEvent(eventId, winIdx){
   ev.resolvedIdx = winIdx;
   state.tips.filter(t=>t.eventId===eventId && t.status==='pending').forEach(t=>{
     if(t.outcomeIdx===winIdx){
-      t.payout = Math.round(t.stake * t.oddsAtTip);
-      state.balance += t.payout;
+      t.points = Math.round(t.oddsAtTip);
       t.status = 'won';
     } else {
-      t.payout = 0;
+      t.points = 0;
       t.status = 'lost';
     }
   });
   save(); render();
 }
 
-function myTipFor(eventId){ return state.tips.find(t=>t.eventId===eventId); }
+function tipFor(eventId, participantId){
+  return state.tips.find(t=>t.eventId===eventId && t.participantId===participantId);
+}
+
+function renderPlayerBar(){
+  const sel = document.getElementById('player-select');
+  sel.innerHTML = state.participants.map(p=>
+    `<option value="${p.id}" ${p.id===state.activeParticipantId?'selected':''}>${p.name} (${fmtPts(pointsFor(p.id))} Pkt.)</option>`
+  ).join('');
+}
+
+function renderHeader(){
+  const p = activeParticipant();
+  document.getElementById('me-badge').textContent = p ? `👤 ${p.name} · ${fmtPts(pointsFor(p.id))} Pkt.` : '–';
+}
 
 function renderEvents(){
   const el = document.getElementById('events-list');
   const open = state.events.filter(e=>e.status==='open');
+  const activeId = state.activeParticipantId;
   if(open.length===0){ el.innerHTML = '<div class="empty">Keine offenen Events.</div>'; return; }
   el.innerHTML = open.map(ev=>{
     const closed = Date.now() > ev.deadline;
-    const existingTip = myTipFor(ev.id);
-    const d = draft[ev.id] || {idx:null, stake:0};
+    const existingTip = tipFor(ev.id, activeId);
+    const selIdx = draft[ev.id];
+    const tipCount = state.tips.filter(t=>t.eventId===ev.id).length;
     const outcomesHtml = ev.outcomes.map((o,idx)=>{
       let cls = 'outcome-btn';
       if(existingTip && existingTip.outcomeIdx===idx) cls += ' selected';
-      else if(!existingTip && d.idx===idx) cls += ' selected';
+      else if(!existingTip && selIdx===idx) cls += ' selected';
       const disabled = existingTip || closed;
       return `<button class="${cls}" ${disabled?'disabled':''} onclick="selectOutcome('${ev.id}',${idx})">
         <div><div class="lbl">${o.label}</div><div class="impl">Implizite Chance ~${implied(o.odds)}</div></div>
-        <div class="odds">${o.odds.toFixed(2)}</div>
+        <div><div class="odds">${o.odds.toFixed(2)}</div><div class="pts-hint">${Math.round(o.odds)} Pkt. bei Treffer</div></div>
       </button>`;
     }).join('');
 
     let actionHtml = '';
     if(existingTip){
-      actionHtml = `<div class="placed-note">Dein Tipp: <b>${ev.outcomes[existingTip.outcomeIdx].label}</b> @ ${existingTip.oddsAtTip.toFixed(2)} · Einsatz ${fmtPts(existingTip.stake)} Pkt. · Möglicher Gewinn ${fmtPts(existingTip.stake*existingTip.oddsAtTip)} Pkt.</div>`;
+      actionHtml = `<div class="placed-note">Dein Tipp: <b>${ev.outcomes[existingTip.outcomeIdx].label}</b> @ ${existingTip.oddsAtTip.toFixed(2)} · bei Treffer ${Math.round(existingTip.oddsAtTip)} Pkt.</div>`;
     } else if(closed){
       actionHtml = `<div class="resolve-box">
         <div class="sl" style="margin-bottom:6px">TIPPS GESCHLOSSEN – ERGEBNIS EINTRAGEN (Demo)</div>
         <div class="resolve-btns">${ev.outcomes.map((o,idx)=>`<button onclick="resolveEvent('${ev.id}',${idx})">${o.label} gewinnt</button>`).join('')}</div>
       </div>`;
     } else {
-      const potential = d.idx!==null && d.stake>0 ? fmtPts(d.stake*ev.outcomes[d.idx].odds) : '–';
-      actionHtml = `
-        <div class="pct-btns">
-          <button class="pct-btn" onclick="setPct('${ev.id}',0.1)">10%</button>
-          <button class="pct-btn" onclick="setPct('${ev.id}',0.25)">25%</button>
-          <button class="pct-btn" onclick="setPct('${ev.id}',0.5)">50%</button>
-          <button class="pct-btn" onclick="setPct('${ev.id}',1)">Max</button>
-        </div>
-        <div class="stake-row">
-          <input type="number" min="1" placeholder="Einsatz" value="${d.stake||''}" oninput="setStake('${ev.id}',this.value)">
-        </div>
-        <div class="potential">Möglicher Gewinn: <b>${potential}</b> Pkt.</div>
-        <button class="save-btn" ${(d.idx===null||d.idx===undefined||!d.stake||d.stake>state.balance)?'disabled':''} onclick="placeTip('${ev.id}')">Tipp abgeben</button>
-      `;
+      actionHtml = `<button class="save-btn" ${(selIdx===undefined||selIdx===null)?'disabled':''} onclick="placeTip('${ev.id}')">Tipp abgeben</button>`;
     }
 
     return `<div class="card">
@@ -293,6 +305,7 @@ function renderEvents(){
         <div class="deadline ${closed?'closed':''}">${closed?'Geschlossen · ':'Tippschluss: '}${fmtDeadline(ev.deadline)}</div>
       </div>
       <div style="font-size:14px;font-weight:700;margin-top:6px">${ev.title}</div>
+      <div class="tip-count">${tipCount} von ${state.participants.length} Mitspielern haben getippt</div>
       <div class="outcomes">${outcomesHtml}</div>
       ${actionHtml}
     </div>`;
@@ -302,15 +315,16 @@ function renderEvents(){
 function renderMyTips(){
   const pendingEl = document.getElementById('pending-list');
   const historyEl = document.getElementById('history-list');
-  const pending = state.tips.filter(t=>t.status==='pending');
-  const history = state.tips.filter(t=>t.status!=='pending').sort((a,b)=>b.placedAt-a.placedAt);
+  const activeId = state.activeParticipantId;
+  const pending = state.tips.filter(t=>t.participantId===activeId && t.status==='pending');
+  const history = state.tips.filter(t=>t.participantId===activeId && t.status!=='pending').sort((a,b)=>b.placedAt-a.placedAt);
 
   pendingEl.innerHTML = pending.length? pending.map(t=>{
     const ev = state.events.find(e=>e.id===t.eventId);
     return `<div class="tip-row">
       <div>
         <div style="font-weight:600">${ev?ev.title:'–'}</div>
-        <div class="meta">${ev?ev.outcomes[t.outcomeIdx].label:''} @ ${t.oddsAtTip.toFixed(2)} · Einsatz ${fmtPts(t.stake)} Pkt.</div>
+        <div class="meta">${ev?ev.outcomes[t.outcomeIdx].label:''} @ ${t.oddsAtTip.toFixed(2)} · bei Treffer ${Math.round(t.oddsAtTip)} Pkt.</div>
       </div>
       <span class="result-badge pending">offen</span>
     </div>`;
@@ -322,41 +336,48 @@ function renderMyTips(){
     return `<div class="tip-row">
       <div>
         <div style="font-weight:600">${ev?ev.title:'–'}</div>
-        <div class="meta">${ev?ev.outcomes[t.outcomeIdx].label:''} @ ${t.oddsAtTip.toFixed(2)} · Einsatz ${fmtPts(t.stake)} Pkt.</div>
+        <div class="meta">${ev?ev.outcomes[t.outcomeIdx].label:''} @ ${t.oddsAtTip.toFixed(2)}</div>
       </div>
-      <span class="result-badge ${won?'won':'lost'}">${won?'+'+fmtPts(t.payout):'-'+fmtPts(t.stake)}</span>
+      <span class="result-badge ${won?'won':'lost'}">${won?'+'+fmtPts(t.points):'0 Pkt.'}</span>
     </div>`;
   }).join('') : '<div class="empty">Noch keine ausgewerteten Tipps.</div>';
 }
 
 function renderLeaderboard(){
   const el = document.getElementById('leaderboard-list');
-  const mock = [
-    {name:'Jana K.', points:1420},
-    {name:'Fabian R.', points:1180},
-    {name:'Mira S.', points:960},
-    {name:'Tom W.', points:740}
-  ];
-  const all = [...mock, {name:'Du', points: state.balance, me:true}].sort((a,b)=>b.points-a.points);
-  el.innerHTML = `<div class="empty" style="padding:0 0 10px;text-align:left;font-size:11px">Demo-Werte anderer Spieler – im echten Betrieb aus der Datenbank.</div>` +
-    all.map((p,i)=>`<div class="lb-row ${p.me?'me':''}">
-      <div class="lb-rank">#${i+1}</div>
-      <div class="lb-name">${p.name}</div>
-      <div class="lb-points">${fmtPts(p.points)} Pkt.</div>
-    </div>`).join('');
+  const rows = state.participants
+    .map(p=>({id:p.id, name:p.name, points: pointsFor(p.id)}))
+    .sort((a,b)=>b.points-a.points);
+  el.innerHTML = rows.map((p,i)=>`<div class="lb-row ${p.id===state.activeParticipantId?'me':''}">
+    <div class="lb-rank">#${i+1}</div>
+    <div class="lb-name">${p.name}</div>
+    <div class="lb-points">${fmtPts(p.points)} Pkt.</div>
+  </div>`).join('');
 }
 
 function render(){
-  document.getElementById('balance-n').textContent = fmtPts(state.balance);
+  renderPlayerBar();
+  renderHeader();
   renderEvents();
   renderMyTips();
   renderLeaderboard();
 }
 
-// --- Create event modal (admin/demo) ---
+// --- Modals: add participant, create event (admin/demo) ---
 let newOutcomeCount = 0;
 function openModal(name){
-  if(name==='createEvent'){
+  if(name==='addParticipant'){
+    document.getElementById('modal-root').innerHTML = `
+      <div class="overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+          <h3>Mitspieler hinzufügen</h3>
+          <input class="inp" id="np-name" placeholder="Name" onkeydown="if(event.key==='Enter')submitAddParticipant()">
+          <button class="save-btn" onclick="submitAddParticipant()">Hinzufügen &amp; als aktiv setzen</button>
+          <button class="btn-ghost" style="width:100%;margin-top:8px;text-align:center" onclick="closeModal()">Abbrechen</button>
+        </div>
+      </div>`;
+    document.getElementById('np-name').focus();
+  } else if(name==='createEvent'){
     newOutcomeCount = 0;
     document.getElementById('modal-root').innerHTML = `
       <div class="overlay" onclick="if(event.target===this)closeModal()">
@@ -375,6 +396,17 @@ function openModal(name){
       </div>`;
     addOutcomeField(); addOutcomeField();
   }
+}
+function submitAddParticipant(){
+  const nameInput = document.getElementById('np-name');
+  const name = nameInput.value.trim();
+  if(!name) return;
+  const id = UID();
+  state.participants.push({id, name});
+  state.activeParticipantId = id;
+  save();
+  closeModal();
+  render();
 }
 function addOutcomeField(){
   const idx = newOutcomeCount++;
